@@ -1,0 +1,132 @@
+import streamlit as st
+import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LinearRegression
+
+# ------------------------------------------------------
+# STEP 1: Load CSV Dataset
+# ------------------------------------------------------
+df = pd.read_csv("crop_yield.csv")
+
+# Convert TRUE/FALSE values to integers
+df['Fertilizer_Used'] = df['Fertilizer_Used'].astype(int)
+df['Irrigation_Used'] = df['Irrigation_Used'].astype(int)
+
+# Rename Yield column
+df = df.rename(columns={
+    "Yield_tons_per_hectare": "Yield"
+})
+
+# ------------------------------------------------------
+# STEP 2: ML Model Training
+# ------------------------------------------------------
+X = df[['Rainfall_mm', 'Temperature_Celsius', 'Fertilizer_Used', 'Irrigation_Used', 'Days_to_Harvest']]
+y = df['Yield']
+
+model = LinearRegression()
+model.fit(X, y)
+
+max_yield = df['Yield'].max()
+
+# ------------------------------------------------------
+# STEP 3: Recommendation Functions
+# ------------------------------------------------------
+def recommend_fertilizer(fert_used, soil_type, crop_type):
+    if fert_used == 1:
+        return "Fertilizer already applied — maintain standard dosage."
+
+    return f"Apply NPK fertilizer (Based on crop: {crop_type}, Soil: {soil_type})"
+
+def recommend_pesticide(irrigation_used, weather):
+    if irrigation_used == 1:
+        return "Irrigation already applied — maintain regular schedule."
+
+    if weather == "Rainy":
+        return "Use Fungicide (High fungus risk)."
+    elif weather == "Sunny":
+        return "Use Mild Insecticide (High insect activity)."
+    else:
+        return "Use Bio-Pesticide (Moderate weather)."
+
+# ------------------------------------------------------
+# STEP 4: Streamlit UI
+# ------------------------------------------------------
+st.set_page_config(page_title="Crop Yield Prediction", layout="wide")
+st.title("🌾 Crop Yield Prediction Using Kaggle Dataset")
+
+st.sidebar.header("Enter Field Details")
+
+# Sidebar Inputs
+rainfall = st.sidebar.number_input("Rainfall (mm)", 0, 500, 100)
+temperature = st.sidebar.number_input("Temperature (°C)", 0, 50, 25)
+
+fert = st.sidebar.selectbox("Fertilizer Used?", ["No", "Yes"])
+irrigation = st.sidebar.selectbox("Irrigation Used?", ["No", "Yes"])
+
+days = st.sidebar.number_input("Days to Harvest", 30, 200, 120)
+
+soil_type = st.sidebar.selectbox("Soil Type", df["Soil_Type"].unique())
+crop_type = st.sidebar.selectbox("Crop", df["Crop"].unique())
+weather = st.sidebar.selectbox("Weather Condition", df["Weather_Condition"].unique())
+
+fert = 1 if fert == "Yes" else 0
+irrigation = 1 if irrigation == "Yes" else 0
+
+# ------------------------------------------------------
+# STEP 5: Prediction Button
+# ------------------------------------------------------
+if st.button("🔍 Predict Yield"):
+    new_data = pd.DataFrame([[rainfall, temperature, fert, irrigation, days]],
+        columns=['Rainfall_mm', 'Temperature_Celsius', 'Fertilizer_Used', 'Irrigation_Used', 'Days_to_Harvest'])
+
+    predicted_yield = model.predict(new_data)[0]
+
+    # Show prediction
+    st.success(f"🌾 Predicted Yield: **{predicted_yield:.2f} tons per hectare**")
+
+    yield_percent = (predicted_yield / max_yield) * 100
+    st.info(f"📊 Yield % of Max: **{yield_percent:.1f}%**")
+
+    # Recommendations
+    fert_rec = recommend_fertilizer(fert, soil_type, crop_type)
+    pest_rec = recommend_pesticide(irrigation, weather)
+
+    st.info(f"💊 Fertilizer Recommendation: **{fert_rec}**")
+    st.warning(f"🦠 Pesticide Recommendation: **{pest_rec}**")
+
+
+# --------------------------------------------------
+    # STEP 6: Visualizations
+    # --------------------------------------------------
+    st.subheader("📈 Yield Visualizations")
+
+    fig, ax = plt.subplots(3, 1, figsize=(10, 15))
+
+    # Plot 1: Rainfall vs Yield
+    ax[0].scatter(df['Rainfall_mm'], df['Yield'])
+    ax[0].scatter(rainfall, predicted_yield, color='red', s=100)
+    ax[0].set_xlabel("Rainfall (mm)")
+    ax[0].set_ylabel("Yield")
+    ax[0].set_title("Rainfall vs Yield")
+
+    # Plot 2: Temperature vs Yield
+    ax[1].scatter(df['Temperature_Celsius'], df['Yield'])
+    ax[1].scatter(temperature, predicted_yield, color='red', s=100)
+    ax[1].set_xlabel("Temperature (°C)")
+    ax[1].set_ylabel("Yield")
+    ax[1].set_title("Temperature vs Yield")
+
+    # Plot 3: Days to Harvest vs Yield
+    ax[2].scatter(df['Days_to_Harvest'], df['Yield'])
+    ax[2].scatter(days, predicted_yield, color='red', s=100)
+    ax[2].set_xlabel("Days to Harvest")
+    ax[2].set_ylabel("Yield")
+    ax[2].set_title("Days to Harvest vs Yield")
+
+    plt.tight_layout()
+
+    # Display
+    with st.container():
+        st.pyplot(fig)
